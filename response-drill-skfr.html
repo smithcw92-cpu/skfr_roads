@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SKFR Response Drill</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #12151c;
+      color: #dde1ea;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #header {
+      background: #1a1f2e;
+      border-bottom: 2px solid #2a3050;
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      gap: 12px;
+    }
+    #header h1 { font-size: 1.05rem; font-weight: 700; color: #e05252; letter-spacing: 0.5px; white-space: nowrap; }
+    #header-stats { font-size: 0.82rem; color: #7a8299; white-space: nowrap; }
+    #main { flex: 1; display: flex; overflow: hidden; position: relative; }
+    #map { flex: 1; min-width: 0; position: relative; }
+
+    /* Map cover overlay */
+    #map-cover {
+      display: none; position: absolute; inset: 0; z-index: 500;
+      background: #12151c;
+      flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    }
+    #map-cover.on { display: flex; }
+    #map-cover p { font-size: 0.82rem; color: #5a6380; }
+    #reveal-btn {
+      padding: 10px 26px; background: #2a3050; border: 1px solid #4a5570;
+      border-radius: 8px; color: #aab0c4; font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    #reveal-btn:hover { background: #323d60; }
+
+    /* Map toggle button in header */
+    #map-toggle-btn {
+      padding: 5px 13px; background: #2a3050; border: 1px solid #3a4060;
+      border-radius: 6px; color: #7a8299; font-size: 0.78rem; font-weight: 600;
+      cursor: pointer; white-space: nowrap; transition: all .15s; flex-shrink: 0;
+    }
+    #map-toggle-btn:hover { background: #323d60; color: #aab0c4; }
+    #map-toggle-btn.hidden-mode { border-color: #e05252; color: #e05252; background: rgba(224,82,82,.1); }
+    #sidebar {
+      width: 310px;
+      flex-shrink: 0;
+      background: #1a1f2e;
+      border-left: 2px solid #2a3050;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .panel { background: #20273a; border: 1px solid #2a3050; border-radius: 8px; padding: 12px; }
+    .panel-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #5a6380; margin-bottom: 9px; }
+
+    /* Station buttons */
+    #station-btns { display: flex; gap: 6px; }
+    .stn-btn {
+      flex: 1; padding: 8px 4px; border-radius: 6px;
+      border: 1px solid #2a3050; background: #12151c;
+      color: #7a8299; font-size: 0.78rem; cursor: pointer;
+      text-align: center; transition: all 0.15s;
+    }
+    .stn-btn:hover { border-color: #4a5570; color: #aab0c4; }
+    .stn-btn.active { background: #e05252; border-color: #e05252; color: #fff; font-weight: 700; }
+    .stn-num { font-size: 1.15rem; font-weight: 700; display: block; line-height: 1; }
+    .stn-sub { font-size: 0.66rem; margin-top: 2px; opacity: 0.8; }
+
+    /* Dispatch panel */
+    #call-label { font-size: 0.95rem; font-weight: 700; color: #e8c77a; margin-bottom: 4px; line-height: 1.4; min-height: 1.4em; }
+    #call-meta  { font-size: 0.75rem; color: #5a6380; }
+
+    /* Progress panel */
+    #step-list {
+      display: flex; flex-direction: column; gap: 4px;
+      max-height: 160px; overflow-y: auto; margin-bottom: 6px;
+    }
+    .step-row {
+      font-size: 0.82rem; padding: 5px 8px; border-radius: 5px;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .step-row.done    { background: rgba(76,175,80,.12); color: #4caf50; border: 1px solid rgba(76,175,80,.25); }
+    .step-row.skipped { background: rgba(255,167,38,.10); color: #ffa726; border: 1px solid rgba(255,167,38,.2); }
+    #step-counter { font-size: 0.74rem; color: #5a6380; min-height: 1em; }
+
+    /* Input */
+    #answer-input {
+      width: 100%; background: #12151c; border: 1px solid #2a3050;
+      border-radius: 6px; color: #dde1ea; font-size: 0.9rem;
+      padding: 9px 11px; outline: none; margin-bottom: 8px;
+    }
+    #answer-input:focus  { border-color: #4a5570; }
+    #answer-input.ok     { border-color: #4caf50; background: rgba(76,175,80,.08); }
+    #answer-input.bad    { border-color: #e05252; background: rgba(224,82,82,.08); }
+    #answer-input.skip   { border-color: #ffa726; }
+    #feedback { font-size: 0.8rem; min-height: 1.2em; margin-bottom: 8px; }
+    .fb-ok   { color: #4caf50; }
+    .fb-bad  { color: #e05252; }
+    .fb-skip { color: #ffa726; }
+    .fb-info { color: #7a8299; }
+    #btn-row { display: flex; gap: 6px; }
+    .abtn {
+      flex: 1; padding: 8px; border-radius: 6px; border: none;
+      cursor: pointer; font-size: 0.82rem; font-weight: 600;
+      transition: opacity .15s;
+    }
+    .abtn:hover:not(:disabled) { opacity: 0.85; }
+    .abtn:disabled { opacity: 0.4; pointer-events: none; }
+    #submit-btn { background: #e05252; color: #fff; }
+    #hint-btn   { background: #2a3050; color: #7a8299; border: 1px solid #3a4060; display: none; }
+    #skip-btn   { background: #2a3050; color: #7a8299; border: 1px solid #3a4060; }
+
+    /* Completion */
+    #completion {
+      display: none;
+      background: rgba(76,175,80,.12); border: 1px solid rgba(76,175,80,.4);
+      border-radius: 6px; padding: 11px; font-size: 0.82rem; color: #4caf50;
+      line-height: 1.5;
+    }
+
+    /* Controls */
+    #new-call-btn {
+      width: 100%; padding: 9px; background: #2a3050; border: 1px solid #3a4060;
+      border-radius: 6px; color: #aab0c4; cursor: pointer; font-size: 0.85rem;
+      font-weight: 600; margin-bottom: 8px; transition: background .15s;
+    }
+    #new-call-btn:hover:not(:disabled) { background: #323d60; }
+    #new-call-btn:disabled { opacity: 0.5; pointer-events: none; }
+    .mode-group-label {
+      font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1px; color: #5a6380; margin-bottom: 5px;
+    }
+    #mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+    .mode-btn {
+      flex: 1; padding: 6px 4px; border-radius: 5px;
+      border: 1px solid #2a3050; background: #12151c;
+      color: #7a8299; font-size: 0.74rem; cursor: pointer;
+    }
+    .mode-btn.active { border-color: #4a90e2; color: #4a90e2; background: rgba(74,144,226,.1); }
+    #addr-wrap { display: flex; gap: 6px; }
+    #addr-wrap.hidden { display: none; }
+    #address-input {
+      flex: 1; background: #12151c; border: 1px solid #2a3050;
+      border-radius: 5px; color: #dde1ea; font-size: 0.82rem;
+      padding: 6px 8px; outline: none;
+    }
+    #address-input:focus { border-color: #4a5570; }
+    #addr-go {
+      padding: 6px 10px; background: #4a90e2; border: none;
+      border-radius: 5px; color: #fff; font-size: 0.82rem; cursor: pointer;
+    }
+
+    /* Score */
+    .score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .score-cell { background: #12151c; border-radius: 6px; padding: 7px 4px; text-align: center; }
+    .score-val  { font-size: 1.35rem; font-weight: 700; color: #e05252; line-height: 1; }
+    .score-lbl  { font-size: 0.65rem; color: #5a6380; margin-top: 3px; }
+
+    /* Route-complete banner — overlays the map */
+    #route-complete-banner {
+      display: none; position: absolute; inset: 0; z-index: 600;
+      background: rgba(12,15,22,.72); backdrop-filter: blur(2px);
+      flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      pointer-events: none;
+    }
+    #route-complete-banner.on { display: flex; animation: rc-fade 3s ease forwards; }
+    @keyframes rc-fade {
+      0%   { opacity: 0; }
+      12%  { opacity: 1; }
+      72%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    .rc-ring {
+      width: 96px; height: 96px; border-radius: 50%;
+      background: rgba(76,175,80,.15); border: 3px solid rgba(76,175,80,.6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 3rem; line-height: 1;
+    }
+    .rc-title { font-size: 1.8rem; font-weight: 700; color: #4caf50; letter-spacing: 0.5px; }
+    .rc-sub   { font-size: 0.85rem; color: #7a8299; }
+
+    /* Loading overlay — sits over all of #main */
+    #loading {
+      display: none; position: absolute; inset: 0; z-index: 2000;
+      background: rgba(18,21,28,.82);
+      align-items: center; justify-content: center;
+      flex-direction: column; gap: 12px;
+    }
+    #loading.on { display: flex; }
+    .spin {
+      width: 36px; height: 36px; border: 3px solid #2a3050;
+      border-top-color: #e05252; border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #load-msg { font-size: 0.84rem; color: #7a8299; }
+
+    /* Leaflet icon helpers */
+    .stn-icon {
+      width: 30px; height: 30px; background: #e05252;
+      border: 2px solid #fff; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.5);
+      line-height: 1;
+    }
+    .dest-icon {
+      width: 20px; height: 20px; background: #4a90e2;
+      border: 2px solid #fff; border-radius: 50%;
+      box-shadow: 0 2px 8px rgba(0,0,0,.5);
+    }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>SKFR Response Drill</h1>
+  <div id="header-stats">—</div>
+  <button id="map-toggle-btn">Hide Map</button>
+</div>
+
+<div id="main">
+  <div id="map">
+    <div id="route-complete-banner">
+      <div class="rc-ring">✓</div>
+      <div class="rc-title">Route Complete!</div>
+      <div class="rc-sub" id="rc-sub"></div>
+    </div>
+    <div id="map-cover">
+      <p>Map hidden — navigate from memory</p>
+      <button id="reveal-btn">Show Map</button>
+    </div>
+  </div>
+
+  <div id="loading">
+    <div class="spin"></div>
+    <div id="load-msg">Loading…</div>
+  </div>
+
+  <div id="sidebar">
+    <div id="sidebar-scroll">
+
+      <div class="panel">
+        <div class="panel-title">Station</div>
+        <div id="station-btns"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Dispatch</div>
+        <div id="call-label">—</div>
+        <div id="call-meta"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Route Progress</div>
+        <div id="step-list"></div>
+        <div id="step-counter"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Next Road</div>
+        <input type="text" id="answer-input" placeholder="Type road name…" autocomplete="off" spellcheck="false">
+        <div id="feedback"></div>
+        <div id="btn-row">
+          <button id="submit-btn" class="abtn">Submit</button>
+          <button id="hint-btn"   class="abtn">Hint</button>
+          <button id="skip-btn"   class="abtn">Skip</button>
+        </div>
+      </div>
+
+      <div id="completion"></div>
+
+      <div class="panel">
+        <button id="new-call-btn">New Call</button>
+        <div class="mode-group-label">Route Type</div>
+        <div id="route-mode-row" style="display:flex;gap:6px;margin-bottom:8px;">
+          <button class="mode-btn active" id="rmode-direct">Most Direct Route</button>
+          <button class="mode-btn"        id="rmode-any">Any Route</button>
+        </div>
+        <div class="mode-group-label" style="margin-top:10px;">Destination</div>
+        <div id="mode-row">
+          <button class="mode-btn active" id="mode-ix">Random</button>
+          <button class="mode-btn"        id="mode-addr">Address</button>
+          <button class="mode-btn"        id="mode-common" style="display:none">Common Spots</button>
+          <button class="mode-btn"        id="mode-dispatch">Dispatch</button>
+        </div>
+        <div id="addr-wrap" class="hidden">
+          <input type="text" id="address-input" placeholder="Address in South Kitsap…">
+          <button id="addr-go">Go</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Session</div>
+        <div class="score-grid">
+          <div class="score-cell"><div class="score-val" id="v-calls">0</div><div class="score-lbl">Calls</div></div>
+          <div class="score-cell"><div class="score-val" id="v-correct">0</div><div class="score-lbl">Correct</div></div>
+          <div class="score-cell"><div class="score-val" id="v-acc">—</div><div class="score-lbl">Accuracy</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Constants ────────────────────────────────────────────────
+const STATIONS = [
+  { id:  8, label: 'Station 8',  sub: 'HQ',       lat: 47.531184, lon: -122.599332, addr: '1974 Fircrest Dr SE' },
+  { id:  9, label: 'Station 9',  sub: 'Mile Hill', lat: 47.534363, lon: -122.553836, addr: '7433 SE Mile Hill Dr' },
+  { id: 10, label: 'Station 10', sub: 'Banner',    lat: 47.5170,   lon: -122.6467,   addr: '5629 Banner Rd SE' },       // coords approx
+  { id: 11, label: 'Station 11', sub: 'Bethel',    lat: 47.491910, lon: -122.631349, addr: '6249 Bethel Rd SE' },
+  { id: 12, label: 'Station 12', sub: 'Olalla',    lat: 47.4400,   lon: -122.5730,   addr: '8696 Olalla Valley Rd SE' }, // coords approx
+  { id: 13, label: 'Station 13', sub: 'Nelson',    lat: 47.4181,   lon: -122.5757,   addr: '5770 SE Nelson Rd' },        // coords approx
+  { id: 14, label: 'Station 14', sub: 'Burley',    lat: 47.4160,   lon: -122.6310,   addr: '12685 Bethel Burley Rd SE' }, // coords approx
+  { id: 15, label: 'Station 15', sub: 'Mntrbrk.',  lat: 47.501073, lon: -122.660787, addr: '13591 Glenwood Rd SW' },
+  { id: 16, label: 'Station 16', sub: 'Gorst',     lat: 47.524763, lon: -122.705613, addr: 'Gorst' },
+  { id: 17, label: 'Station 17', sub: 'McCrmck.',  lat: 47.487705, lon: -122.665687, addr: '7990 McCormick Woods Dr SW' },
+  { id: 31, label: 'Station 31', sub: 'Tremont',   lat: 47.524943, lon: -122.645702, addr: '200 Tremont St' },
+];
+
+// ── Common Call Spots ─────────────────────────────────────────
+// Add South Kitsap-specific common call locations here when ready.
+// Each entry needs: { label: 'Description', lat: 47.XXXX, lon: -122.XXXX }
+// To find coordinates: Google Maps → right-click a location → copy the lat/lon shown.
+const COMMON_ADDRESSES = [
+  // Examples (uncomment and fill in coordinates):
+  // { label: 'St. Anthony Hospital',      lat: 47.XXXX, lon: -122.XXXX },
+  // { label: 'Southworth Ferry Terminal', lat: 47.XXXX, lon: -122.XXXX },
+  // { label: 'Kitsap County Fairgrounds', lat: 47.XXXX, lon: -122.XXXX },
+];
+
+// ── State ────────────────────────────────────────────────────
+let station    = STATIONS[0];
+let ixList     = [];       // all computed intersections on the island
+let call       = null;     // { lat, lon, label }
+let route      = null;     // { steps, totalDistance, fullGeometry }
+let stepIdx    = 0;
+let active     = false;
+let mode       = 'intersection';
+let routeMode  = 'direct'; // 'direct' | 'any'
+let wrongCt       = 0;
+let mapHidden     = false;
+let routeComplete = false;
+let sess       = { calls: 0, correct: 0, total: 0 };
+let roadNameSet = new Set();
+let roadWays    = [];          // road way geometries for dispatch mode
+let userSteps   = [];
+
+// ── Map ──────────────────────────────────────────────────────
+let map, stnMarker, dstMarker;
+let progLines = [];
+
+function initMap() {
+  map = L.map('map', { center: [47.460, -122.630], zoom: 11 });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap, © CartoDB', subdomains: 'abcd', maxZoom: 19,
+  }).addTo(map);
+}
+
+function mkIcon(cls) {
+  return L.divIcon({ html: `<div class="${cls}"></div>`, className: '', iconSize: [30, 30], iconAnchor: [15, 15] });
+}
+
+function stnIcon() {
+  return L.divIcon({
+    html: '<div class="stn-icon">🚒</div>',
+    className: '', iconSize: [30, 30], iconAnchor: [15, 15],
+  });
+}
+
+function placeStn() {
+  if (stnMarker) map.removeLayer(stnMarker);
+  stnMarker = L.marker([station.lat, station.lon], { icon: stnIcon() })
+    .addTo(map)
+    .bindTooltip(`${station.label} — ${station.addr}`, { permanent: false });
+}
+
+function placeDst(lat, lon, label) {
+  if (dstMarker) map.removeLayer(dstMarker);
+  dstMarker = L.marker([lat, lon], { icon: mkIcon('dest-icon') })
+    .addTo(map)
+    .bindTooltip(label, { permanent: false });
+}
+
+function clearLines() {
+  progLines.forEach(l => map.removeLayer(l));
+  progLines = [];
+}
+
+function drawLine(geometry, color, dashArray) {
+  const coords = geometry.coordinates.map(([lo, la]) => [la, lo]);
+  const l = L.polyline(coords, { color, weight: 5, opacity: 0.85, dashArray }).addTo(map);
+  progLines.push(l);
+}
+
+// ── Data ─────────────────────────────────────────────────────
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
+
+async function loadRoadData() {
+  // SKFR has no OSM fire district polygon yet — using bounding box instead.
+  // S: 47.36  N: 47.56  W: -122.76  E: -122.50
+  const query = `[out:json][timeout:60];
+(
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|road)$"]["name"](47.36,-122.76,47.56,-122.50);
+);
+out body geom;`;
+
+  const msgEl = document.getElementById('load-msg');
+
+  for (let attempt = 0; attempt < OVERPASS_ENDPOINTS.length; attempt++) {
+    const endpoint = OVERPASS_ENDPOINTS[attempt];
+    if (attempt > 0) {
+      msgEl.textContent = `Trying mirror server ${attempt + 1} of ${OVERPASS_ENDPOINTS.length}…`;
+      await new Promise(res => setTimeout(res, 1500));
+    }
+    try {
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: query,
+        signal: AbortSignal.timeout(70_000),
+      });
+      if (r.status === 429 || r.status === 504) continue;
+      if (!r.ok) throw new Error(`Overpass HTTP ${r.status}`);
+      return r.json();
+    } catch (e) {
+      if (attempt === OVERPASS_ENDPOINTS.length - 1) throw e;
+    }
+  }
+  throw new Error('All Overpass servers are busy — please wait a minute and retry.');
+}
+
+function buildIntersections(data) {
+  // nodeId -> { lat, lon, roads: Set<string> }
+  const nodeMap = {};
+  for (const el of data.elements) {
+    if (el.type !== 'way' || !el.tags?.name || !el.nodes || !el.geometry) continue;
+    const name = el.tags.name;
+    roadNameSet.add(name);
+    for (let i = 0; i < el.nodes.length; i++) {
+      const nid = el.nodes[i], g = el.geometry[i];
+      if (!g) continue;
+      if (!nodeMap[nid]) nodeMap[nid] = { lat: g.lat, lon: g.lon, roads: new Set() };
+      nodeMap[nid].roads.add(name);
+    }
+  }
+  const result = [];
+  for (const { lat, lon, roads } of Object.values(nodeMap)) {
+    if (roads.size >= 2) {
+      const arr = [...roads];
+      result.push({ lat, lon, label: arr[0] + ' & ' + arr[1] });
+    }
+  }
+  return result;
+}
+
+async function getRoute(fLat, fLon, tLat, tLon) {
+  const url = `https://router.project-osrm.org/route/v1/driving/${fLon},${fLat};${tLon},${tLat}?steps=true&geometries=geojson&overview=full`;
+  const r = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!r.ok) throw new Error(`OSRM ${r.status}`);
+  const d = await r.json();
+  if (d.code !== 'Ok' || !d.routes?.length) throw new Error('No route found');
+
+  const rt  = d.routes[0];
+  const raw = rt.legs[0].steps.filter(s => s.name && s.maneuver.type !== 'arrive');
+
+  // Merge consecutive steps with the same road name
+  const steps = [];
+  for (const s of raw) {
+    if (steps.length && s.name === steps[steps.length - 1].name) {
+      const prev = steps[steps.length - 1];
+      prev.geometry.coordinates.push(...s.geometry.coordinates.slice(1));
+      prev.distance += s.distance;
+    } else {
+      steps.push({
+        name: s.name,
+        geometry: JSON.parse(JSON.stringify(s.geometry)),
+        distance: s.distance,
+        maneuver: s.maneuver,
+      });
+    }
+  }
+  return { steps, totalDistance: rt.distance, fullGeometry: rt.geometry };
+}
+
+function buildRoadWays(data) {
+  const ways = [];
+  for (const el of data.elements) {
+    if (el.type !== 'way' || !el.tags?.name || !el.geometry) continue;
+    const nodes = el.geometry.filter(g => g != null);
+    if (nodes.length >= 2) ways.push({ name: el.tags.name, nodes });
+  }
+  return ways;
+}
+
+async function reverseGeocode(lat, lon) {
+  const r = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`,
+    { headers: { 'Accept-Language': 'en' }, signal: AbortSignal.timeout(10_000) }
+  );
+  return r.json();
+}
+
+function getCrossStreets(roadName, lat, lon, count = 2) {
+  // Prefer intersections that actually involve this road
+  const onRoad = ixList
+    .filter(ix => ix.label.split(' & ').some(p => p.trim() === roadName))
+    .map(ix => ({ ...ix, dist: Math.hypot(ix.lat - lat, ix.lon - lon) }))
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, count);
+  if (onRoad.length) {
+    return onRoad.map(ix => {
+      const parts = ix.label.split(' & ');
+      return (parts.find(p => p.trim() !== roadName) || parts[0]).trim();
+    });
+  }
+  // Fallback: nearest intersections by distance
+  return ixList
+    .map(ix => ({ ...ix, dist: Math.hypot(ix.lat - lat, ix.lon - lon) }))
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, count)
+    .map(ix => ix.label);
+}
+
+async function geocodeAddr(q) {
+  const enc = encodeURIComponent(q + ', Port Orchard, WA');
+  const r = await fetch(
+    `https://nominatim.openstreetmap.org/search?q=${enc}&format=json&limit=5&countrycodes=us`,
+    { headers: { 'Accept-Language': 'en' }, signal: AbortSignal.timeout(10_000) }
+  );
+  return r.json();
+}
+
+async function startDispatchCall() {
+  if (!roadWays.length || !ixList.length) {
+    document.getElementById('call-label').textContent = 'Road data not ready — try again.';
+    return;
+  }
+  setLoad(true, 'Finding dispatch address…');
+  const minDeg = 0.006; // ~600m minimum from station
+  let dest = null;
+
+  for (let attempt = 0; attempt < 6 && !dest; attempt++) {
+    try {
+      const way  = roadWays[Math.floor(Math.random() * roadWays.length)];
+      const node = way.nodes[Math.floor(Math.random() * way.nodes.length)];
+      if (Math.hypot(node.lat - station.lat, node.lon - station.lon) < minDeg) continue;
+
+      const result   = await reverseGeocode(node.lat, node.lon);
+      const houseNum = result?.address?.house_number || '';
+      const addrLine = houseNum ? `${houseNum} ${way.name}` : way.name;
+
+      const crosses  = getCrossStreets(way.name, node.lat, node.lon);
+      const crossStr = crosses.length ? `Cross: ${crosses.join(' & ')}` : '';
+      const label    = crossStr ? `${addrLine} — ${crossStr}` : addrLine;
+
+      dest = { lat: node.lat, lon: node.lon, label };
+    } catch (_) {}
+  }
+
+  if (!dest) {
+    setLoad(false);
+    document.getElementById('call-label').textContent = 'Could not find dispatch address — try again.';
+    return;
+  }
+  await startCall(dest);
+}
+
+// ── Quiz ─────────────────────────────────────────────────────
+function norm(s) {
+  return s.toLowerCase().trim()
+    .replace(/\brd\b\.?/g, 'road').replace(/\bave?\b\.?/g, 'avenue').replace(/\bdr\b\.?/g, 'drive')
+    .replace(/\bblvd\b\.?/g, 'boulevard').replace(/\bln\b\.?/g, 'lane').replace(/\bct\b\.?/g, 'court')
+    .replace(/\bpl\b\.?/g, 'place').replace(/\bhwy\b\.?/g, 'highway').replace(/\bst\b\.?/g, 'street')
+    .replace(/\s+/g, ' ');
+}
+
+function accepted(input, correct) {
+  const u = norm(input), c = norm(correct);
+  if (u === c) return true;
+  const esc = u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('(?:^|\\s)' + esc + '(?:\\s|$)').test(c);
+}
+
+async function startCall(destOverride) {
+  active = false;
+  routeComplete = false;
+  setLoad(true, destOverride ? 'Routing…' : 'Finding route…');
+  clearLines();
+  clearInput();
+  fb('', '');
+  document.getElementById('completion').style.display = 'none';
+  document.getElementById('step-list').innerHTML = '';
+  document.getElementById('hint-btn').style.display = 'none';
+  wrongCt    = 0;
+  userSteps  = [];
+  document.getElementById('skip-btn').textContent = routeMode === 'any' ? 'Arrived' : 'Skip';
+
+  let dest = destOverride;
+  let rt;
+
+  if (!dest) {
+    if (!ixList.length) { setLoad(false); return; }
+    // Try random intersections until we find a good route
+    const minDeg = 0.006;  // ~600m minimum distance
+    const pool = shuffle(ixList.filter(x =>
+      Math.hypot(x.lat - station.lat, x.lon - station.lon) > minDeg
+    ));
+    for (const ix of pool.slice(0, 12)) {
+      try {
+        const r = await getRoute(station.lat, station.lon, ix.lat, ix.lon);
+        if (r.steps.length >= 2 && r.totalDistance >= 400) {
+          dest = ix; rt = r; break;
+        }
+      } catch (_) {}
+    }
+    if (!dest) {
+      setLoad(false);
+      document.getElementById('call-label').textContent = 'Could not find a routable intersection — try again.';
+      return;
+    }
+  } else {
+    try {
+      rt = await getRoute(station.lat, station.lon, dest.lat, dest.lon);
+    } catch (e) {
+      setLoad(false);
+      document.getElementById('call-label').textContent = `Routing failed: ${e.message}`;
+      return;
+    }
+  }
+
+  call    = dest;
+  route   = rt;
+  stepIdx = 0;
+  active  = true;
+  sess.calls++;
+
+  placeStn();
+  placeDst(dest.lat, dest.lon, dest.label);
+  map.fitBounds(
+    L.latLngBounds([station.lat, station.lon], [dest.lat, dest.lon]),
+    { padding: [60, 60] }
+  );
+
+  const mi = (rt.totalDistance / 1609.34).toFixed(1);
+  document.getElementById('call-label').textContent = dest.label;
+  document.getElementById('call-meta').textContent  = `${mi} mi · ${rt.steps.length} roads · ${station.label}`;
+
+  updateCounter();
+  updateStats();
+  setLoad(false);
+  document.getElementById('answer-input').focus();
+}
+
+function findRoadMatch(input) {
+  const u = norm(input);
+  for (const name of roadNameSet) {
+    if (norm(name) === u) return name;
+    const esc = u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp('(?:^|\\s)' + esc + '(?:\\s|$)').test(norm(name))) return name;
+  }
+  return null;
+}
+
+function checkAnswer() {
+  if (!active || !route) return;
+  const inp = document.getElementById('answer-input');
+  const val = inp.value.trim();
+  if (!val) return;
+
+  if (routeMode === 'any') {
+    const matched = findRoadMatch(val);
+    if (matched) {
+      userSteps.push(matched);
+      sess.correct++; sess.total++; wrongCt = 0;
+      inp.className = 'ok';
+      fb(`✓  ${matched}`, 'fb-ok');
+      addStep(matched, 'done');
+      for (const w of roadWays.filter(w => w.name === matched)) {
+        drawLine({ type: 'LineString', coordinates: w.nodes.map(n => [n.lon, n.lat]) }, '#4caf50');
+      }
+      updateCounter();
+      setTimeout(() => { clearInput(); fb('', ''); document.getElementById('answer-input').focus(); }, 700);
+    } else {
+      sess.total++; wrongCt++;
+      inp.className = 'bad';
+      fb('Not a recognized road — check the name.', 'fb-bad');
+    }
+    updateStats();
+    return;
+  }
+
+  if (stepIdx >= route.steps.length) return;
+  const expected = route.steps[stepIdx].name;
+
+  if (accepted(val, expected)) {
+    sess.correct++; sess.total++; wrongCt = 0;
+    inp.className = 'ok';
+    fb(`✓  ${expected}`, 'fb-ok');
+    drawLine(route.steps[stepIdx].geometry, '#4caf50');
+    addStep(expected, 'done');
+    stepIdx++;
+    document.getElementById('hint-btn').style.display = 'none';
+
+    if (stepIdx >= route.steps.length) {
+      completeRoute();
+    } else {
+      updateCounter();
+      setTimeout(() => { clearInput(); fb('', ''); document.getElementById('answer-input').focus(); }, 700);
+    }
+  } else {
+    sess.total++; wrongCt++;
+    inp.className = 'bad';
+    fb('Not quite — try again.', 'fb-bad');
+    if (wrongCt >= 2) document.getElementById('hint-btn').style.display = '';
+  }
+  updateStats();
+}
+
+function doHint() {
+  if (!active || !route || stepIdx >= route.steps.length) return;
+  const m = route.steps[stepIdx].maneuver;
+  const modMap = { left: 'Turn left', right: 'Turn right', 'slight left': 'Bear left',
+    'slight right': 'Bear right', straight: 'Continue straight', uturn: 'U-turn' };
+  const hint = m.type === 'depart' ? 'Depart' : (modMap[m.modifier] || 'Turn');
+  fb(`Hint: ${hint} onto [?]`, 'fb-info');
+  document.getElementById('answer-input').focus();
+}
+
+function doArrive() {
+  if (!active) return;
+  active = false;
+  routeComplete = true;
+  const osrmRoads = route.steps.length;
+  const mi        = (route.totalDistance / 1609.34).toFixed(1);
+  // Draw OSRM optimal route as blue dashed overlay for comparison
+  drawLine(route.fullGeometry, '#4a90e2', '8 5');
+  const comp = document.getElementById('completion');
+  comp.style.display = 'block';
+  comp.textContent = `Arrived! You named ${userSteps.length} road${userSteps.length !== 1 ? 's' : ''}. OSRM optimal: ${osrmRoads} roads, ${mi} mi (shown in blue). Press Enter or "New Call" to continue.`;
+  document.getElementById('step-counter').textContent = `${userSteps.length} roads named`;
+  showRouteBanner(`${userSteps.length} road${userSteps.length !== 1 ? 's' : ''} named`);
+  updateStats();
+}
+
+function doSkip() {
+  if (routeMode === 'any') { doArrive(); return; }
+  if (!active || !route || stepIdx >= route.steps.length) return;
+  const expected = route.steps[stepIdx].name;
+  sess.total++; wrongCt = 0;
+  document.getElementById('answer-input').className = 'skip';
+  fb(`Skipped: ${expected}`, 'fb-skip');
+  drawLine(route.steps[stepIdx].geometry, '#ffa726');
+  addStep(expected, 'skipped');
+  stepIdx++;
+  document.getElementById('hint-btn').style.display = 'none';
+
+  if (stepIdx >= route.steps.length) {
+    completeRoute();
+  } else {
+    updateCounter();
+    setTimeout(() => { clearInput(); fb('', ''); document.getElementById('answer-input').focus(); }, 1000);
+  }
+  updateStats();
+}
+
+function completeRoute() {
+  active = false;
+  routeComplete = true;
+  const mi    = (route.totalDistance / 1609.34).toFixed(1);
+  const total = route.steps.length;
+  const comp  = document.getElementById('completion');
+  comp.style.display = 'block';
+  comp.textContent = `Route complete — ${total} roads, ${mi} mi. Press Enter or "New Call" to continue.`;
+  document.getElementById('step-counter').textContent = `All ${total} roads complete`;
+  // Draw full route as faint dashed overlay
+  drawLine(route.fullGeometry, '#4caf50', '8 5');
+  showRouteBanner(`${total} roads · ${mi} mi`);
+  updateStats();
+}
+
+function showRouteBanner(subText) {
+  const banner = document.getElementById('route-complete-banner');
+  document.getElementById('rc-sub').textContent = subText;
+  banner.classList.remove('on');
+  void banner.offsetWidth; // force reflow to restart animation
+  banner.classList.add('on');
+  setTimeout(() => banner.classList.remove('on'), 3000);
+}
+
+// ── UI helpers ────────────────────────────────────────────────
+function setLoad(on, msg) {
+  document.getElementById('loading').classList.toggle('on', on);
+  if (msg) document.getElementById('load-msg').textContent = msg;
+  document.getElementById('new-call-btn').disabled = on;
+  document.getElementById('submit-btn').disabled   = on;
+}
+
+function clearInput() {
+  const inp = document.getElementById('answer-input');
+  inp.value = ''; inp.className = '';
+}
+
+function fb(text, cls) {
+  const el = document.getElementById('feedback');
+  el.textContent = text; el.className = cls;
+}
+
+function addStep(name, type) {
+  const list = document.getElementById('step-list');
+  const div  = document.createElement('div');
+  div.className = 'step-row ' + type;
+  div.innerHTML = `<span>${type === 'done' ? '✓' : '→'}</span><span>${name}</span>`;
+  list.appendChild(div);
+  list.scrollTop = list.scrollHeight;
+}
+
+function updateCounter() {
+  if (routeMode === 'any') {
+    const n = userSteps.length;
+    document.getElementById('step-counter').textContent = n
+      ? `${n} road${n !== 1 ? 's' : ''} named — press Arrived when done`
+      : 'Name each road you take to the destination';
+    return;
+  }
+  const tot = route?.steps?.length ?? 0;
+  document.getElementById('step-counter').textContent = tot
+    ? `Step ${stepIdx + 1} of ${tot}`
+    : '';
+}
+
+function updateStats() {
+  const acc = sess.total > 0 ? Math.round(sess.correct / sess.total * 100) + '%' : '—';
+  document.getElementById('header-stats').textContent =
+    `Station ${station.id}  ·  Calls: ${sess.calls}  ·  Accuracy: ${acc}`;
+  document.getElementById('v-calls').textContent   = sess.calls;
+  document.getElementById('v-correct').textContent = sess.correct;
+  document.getElementById('v-acc').textContent     = acc;
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function setStation(stn) {
+  station = stn;
+  document.querySelectorAll('.stn-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.id == stn.id)
+  );
+  placeStn();
+  map.setView([stn.lat, stn.lon], 13);
+  updateStats();
+}
+
+// ── Map toggle ───────────────────────────────────────────────
+function toggleMap(forceShow) {
+  mapHidden = forceShow === true ? false : !mapHidden;
+  document.getElementById('map-cover').classList.toggle('on', mapHidden);
+  const btn = document.getElementById('map-toggle-btn');
+  btn.textContent = mapHidden ? 'Show Map' : 'Hide Map';
+  btn.classList.toggle('hidden-mode', mapHidden);
+  if (!mapHidden) map.invalidateSize();
+}
+
+// ── Build station buttons ─────────────────────────────────────
+function buildStationBtns() {
+  const wrap = document.getElementById('station-btns');
+  for (const stn of STATIONS) {
+    const b = document.createElement('button');
+    b.className  = 'stn-btn' + (stn === station ? ' active' : '');
+    b.dataset.id = stn.id;
+    b.innerHTML  = `<span class="stn-num">${stn.id}</span><span class="stn-sub">${stn.sub}</span>`;
+    b.addEventListener('click', () => setStation(stn));
+    wrap.appendChild(b);
+  }
+}
+
+// ── Events ────────────────────────────────────────────────────
+document.getElementById('submit-btn').addEventListener('click', checkAnswer);
+document.getElementById('hint-btn').addEventListener('click',   doHint);
+document.getElementById('skip-btn').addEventListener('click',   doSkip);
+document.getElementById('map-toggle-btn').addEventListener('click', () => toggleMap());
+document.getElementById('reveal-btn').addEventListener('click',     () => toggleMap(true));
+
+document.getElementById('new-call-btn').addEventListener('click', () => {
+  if (mode === 'intersection') {
+    startCall();
+  } else if (mode === 'common') {
+    if (!COMMON_ADDRESSES.length) {
+      document.getElementById('call-label').textContent = 'No common addresses defined yet — add entries to COMMON_ADDRESSES in the code.';
+      return;
+    }
+    const pick = COMMON_ADDRESSES[Math.floor(Math.random() * COMMON_ADDRESSES.length)];
+    startCall(pick);
+  } else if (mode === 'dispatch') {
+    startDispatchCall();
+  } else {
+    document.getElementById('address-input').focus();
+    document.getElementById('call-label').textContent = 'Enter an address above, then press Go.';
+  }
+});
+
+document.getElementById('answer-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (routeComplete) document.getElementById('new-call-btn').click();
+    else checkAnswer();
+  }
+  if (e.key === 'Escape') doSkip();
+});
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-ix').classList.toggle('active',       m === 'intersection');
+  document.getElementById('mode-addr').classList.toggle('active',     m === 'address');
+  document.getElementById('mode-common').classList.toggle('active',   m === 'common');
+  document.getElementById('mode-dispatch').classList.toggle('active', m === 'dispatch');
+  document.getElementById('addr-wrap').classList.toggle('hidden',     m !== 'address');
+  if (m === 'address') setTimeout(() => document.getElementById('address-input').focus(), 50);
+}
+
+document.getElementById('mode-ix').addEventListener('click',       () => setMode('intersection'));
+document.getElementById('mode-addr').addEventListener('click',     () => setMode('address'));
+document.getElementById('mode-common').addEventListener('click',   () => setMode('common'));
+document.getElementById('mode-dispatch').addEventListener('click', () => setMode('dispatch'));
+
+document.getElementById('addr-go').addEventListener('click', async () => {
+  const addr = document.getElementById('address-input').value.trim();
+  if (!addr) return;
+  setLoad(true, 'Geocoding address…');
+  try {
+    const results = await geocodeAddr(addr);
+    if (!results.length) {
+      setLoad(false);
+      alert('Address not found. Try a street name or intersection in South Kitsap (Port Orchard, Olalla, Burley, Gorst, etc.).');
+      return;
+    }
+    const r    = results[0];
+    const dest = {
+      lat:   parseFloat(r.lat),
+      lon:   parseFloat(r.lon),
+      label: r.display_name.split(',').slice(0, 2).join(', '),
+    };
+    await startCall(dest);
+  } catch (err) {
+    setLoad(false);
+    document.getElementById('call-label').textContent = `Error: ${err.message}`;
+  }
+});
+
+document.getElementById('address-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('addr-go').click();
+});
+
+document.getElementById('rmode-direct').addEventListener('click', () => {
+  routeMode = 'direct';
+  document.getElementById('rmode-direct').classList.add('active');
+  document.getElementById('rmode-any').classList.remove('active');
+  document.getElementById('skip-btn').textContent = 'Skip';
+});
+
+document.getElementById('rmode-any').addEventListener('click', () => {
+  routeMode = 'any';
+  document.getElementById('rmode-any').classList.add('active');
+  document.getElementById('rmode-direct').classList.remove('active');
+  document.getElementById('skip-btn').textContent = 'Arrived';
+});
+
+// ── Init ──────────────────────────────────────────────────────
+async function init() {
+  initMap();
+  buildStationBtns();
+  placeStn();
+  setLoad(true, 'Loading South Kitsap road data…');
+  try {
+    const data = await loadRoadData();
+    ixList    = buildIntersections(data);
+    roadWays  = buildRoadWays(data);
+    if (ixList.length < 5) throw new Error(`Only ${ixList.length} intersections found — check Overpass query`);
+    setLoad(false);
+    await startCall();
+  } catch (err) {
+    setLoad(false);
+    document.getElementById('call-label').textContent = `Error: ${err.message}`;
+    console.error(err);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
